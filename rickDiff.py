@@ -16,9 +16,12 @@ import time
 #//
 #//**********************************************************************
 
-PROGRAM_NAME = "RickDiff"
-VERSION = "0.1"
-COPYRIGHT_MESSAGE = "copyright (c) 2012, iDirect"
+PROGRAM_NAME = 'RickDiff'
+VERSION = '0.3'
+DESCRIPTION = 'compares CVS versions using meld'
+
+TO_DEV_NULL = ' 2> NUL'
+
 
 #//**********************************************************************
 #//
@@ -27,55 +30,86 @@ COPYRIGHT_MESSAGE = "copyright (c) 2012, iDirect"
 #//**********************************************************************
 
 def main( ):
-    parser = argparse.ArgumentParser( prog=PROGRAM_NAME, description=PROGRAM_NAME + ' - ' + VERSION + ' - ' + COPYRIGHT_MESSAGE )
+    parser = argparse.ArgumentParser( prog=PROGRAM_NAME, description=PROGRAM_NAME + ' - ' + VERSION + ' - ' + DESCRIPTION,
+                                      epilog=
+'''
+RickDiff relies on the existence of the file 'CVS/Repository' to figure out 
+where 'fileName' is, uses the environment variable 'TEMP', and expects 'cvs' 
+and 'meld' to launch those respective programs from the command line.
+''' )
 
-    parser.add_argument( 'inputFile', help='' )
-    parser.add_argument( 'firstVersion', help='' )
-    parser.add_argument( 'secondVersion', nargs='?', default='', help='' )
+    parser.add_argument( 'fileName', nargs='?', default='', help='the file to compare' )
+    parser.add_argument( 'firstVersion', nargs='?', default='', help='first version to compare (optional: blank means compare existing file against trunk)' )
+    parser.add_argument( 'secondVersion', nargs='?', default='', help='second version to compare (optional: blank means compare firstVersion against trunk)' )
+    parser.add_argument( '-d', '--skip_dos2unix', action='store_true', help='skips dos2unix-unix2dos step, which is intended to fix line endings' )
+    parser.add_argument( '-t', '--test', action='store_true', help='print commands, don\'t execute them' )
 
     args = parser.parse_args( )
 
+    if args.fileName == '':
+        parser.print_help( )
+        return
+
     try:
-        linuxPath = os.path.relpath( args.inputFile, 'd:\\dev\\' )
+        with open( 'CVS/Repository' ) as inputFile:
+            linuxPath = inputFile.read( )[ : -1 ]
     except:
-        linuxPath = args.inputFile.replace( '\\', '/' )
+        print( PROGRAM_NAME + ':  cannot find CVS/Repository' )
+        return
 
-    fileName = os.path.split( linuxPath )[ 1 ]
-    linuxPath = linuxPath[ linuxPath.find( '\\' ) + 1 : ].replace( '\\', '/' )
-
+    linuxPath += '/' + args.fileName
+        
     firstVersion = args.firstVersion
     secondVersion = args.secondVersion
 
-    #print( linuxPath )            
-    #print( fileName )            
-
-    base, ext = os.path.splitext( fileName )
-
-    #print( base )
-    #print( ext )
-
-    #print( firstVersion )
-    #print( secondVersion )
+    base, ext = os.path.splitext( args.fileName )
 
     tempDir = os.environ[ 'TEMP' ]
 
-    firstFileName = os.path.join( tempDir, base + '.' + firstVersion + ext )
-    command = 'cvs co -p -r ' + firstVersion + ' ' + linuxPath + ' > ' + firstFileName
+    if firstVersion == '':
+        firstFileName = os.path.join( tempDir, args.fileName )
+        command = 'copy ' + args.fileName + ' ' + tempDir + TO_DEV_NULL
+    else:
+        firstFileName = os.path.join( tempDir, base + '.' + firstVersion + ext )
+        command = 'cvs co -p -r ' + firstVersion + ' ' + linuxPath + ' > ' + firstFileName + TO_DEV_NULL
 
-    os.system( command )
+    if args.test:
+        print( command )
+    else:
+        os.system( command )
+
+    if not args.skip_dos2unix and not args.test:
+        os.system( 'dos2unix ' + firstFileName + TO_DEV_NULL )
+        os.system( 'unix2dos ' + firstFileName + TO_DEV_NULL )
 
     if secondVersion == '':
-        secondFileName = os.path.join( tempDir, fileName )
-        command = 'cvs co -p ' + linuxPath + ' > ' + secondFileName
+        secondFileName = os.path.join( tempDir, base + '.trunk' + ext )
+        command = 'cvs co -p ' + linuxPath + ' > ' + secondFileName + TO_DEV_NULL
     else:                    
         secondFileName = os.path.join( tempDir, base + '.' + secondVersion + ext )
-        command = 'cvs co -p -r ' + secondVersion + ' ' + linuxPath + ' > ' + secondFileName
+        command = 'cvs co -p -r ' + secondVersion + ' ' + linuxPath + ' > ' + secondFileName + TO_DEV_NULL
 
-    os.system( command )
+    if not args.cmd:
+        command += ' >& NUL'
 
-    command = 'meld ' + firstFileName + ' ' + secondFileName
+    if args.test:
+        print( command )
+    else:
+        os.system( command )
 
-    os.system( command )
+    if not args.skip_dos2unix and not args.test:
+        os.system( 'dos2unix ' + secondFileName + TO_DEV_NULL )
+        os.system( 'unix2dos ' + secondFileName + TO_DEV_NULL )
+
+    if firstVersion == '':
+        command = 'meld ' + secondFileName + ' ' + firstFileName + TO_DEV_NULL
+    else:        
+        command = 'meld ' + firstFileName + ' ' + secondFileName + TO_DEV_NULL
+
+    if args.test:
+        print( command )
+    else:
+        os.system( command )
 
 
 #//**********************************************************************
@@ -87,30 +121,3 @@ def main( ):
 if __name__ == '__main__':
     main( )
 
-
-
-
-
-#setlocal
-#
-#iff "%1" == "" .or. "%2" == "" then
-#    echo usage: cvsdiff file version1 [version2]
-#else
-#   set MODULE=%@replace[\,/,%1]
-#
-#   set TEMP_FILE_1=%TEMP_DIR%\%@NAME[%1].%2.%@EXT[%1]
-#   cvs co -p -r %2 %MODULE > %TEMP_FILE_1%
-#
-#   iff "%3" == "" then
-#       set TEMP_FILE_2=%TEMP_DIR%\%@FILENAME[%1]
-#       cvs co -p %MODULE > %TEMP_FILE_2
-#   else
-#       set TEMP_FILE_2=%TEMP_DIR%\%@NAME[%1].%3.%@EXT[%1]
-#       cvs co -p -r %3 %MODULE > %TEMP_FILE_2
-#   endiff
-#
-#   %BAT_DIR%\meld %TEMP_FILE_1 %TEMP_FILE_2
-#endiff
-#
-#endlocal 
-#
