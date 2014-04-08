@@ -17,7 +17,7 @@ import tempfile
 #//************************************************************************************************
 
 PROGRAM_NAME = 'rickDiff'
-VERSION = '0.7.1'
+VERSION = '0.8.0'
 DESCRIPTION = 'compares CVS versions using meld'
 
 STD_DEV_NULL = ' > NUL'
@@ -86,8 +86,9 @@ def incrementVersionSimple( version, increment ):
 
 def incrementVersion( targetFile, version, increment ):
     print( '\rParsing CVS log...\r', end='' )
-    process = subprocess.Popen( [ 'cvs', 'log', '-Nb', targetFile ], stdout=subprocess.PIPE, shell=True,
-                                universal_newlines=True )
+
+    process = subprocess.Popen( [ 'cvs', 'log', '-Nb', targetFile ], stdout=subprocess.PIPE,
+                                  shell=True, universal_newlines=True )
 
     versions = [ ]
 
@@ -145,7 +146,6 @@ def parseVersionFromEntries( targetFile ):
     raise Exception( "'" + targetFile + "' not found in CVS/Entries, not under version control?" )
 
 
-
 #//******************************************************************************
 #//
 #//  buildDevFileName
@@ -167,6 +167,147 @@ def buildDevFileName( devRoot, sourceFileName, dirName ):
         sourceList.insert( 0, i )
 
     return os.sep.join( sourceList )
+
+
+#//******************************************************************************
+#//
+#//  createFileCommand
+#//
+#//  This function interprets the version argument in one of several ways.
+#//
+#//  First, if it's 'HEAD', rickDiff will check out the trunk version.
+#//
+#//  If it's 'CURRENT', rickDiff will check out whatever version is checked out
+#//  in the source directory according to CVS/Entries.  'CURRENT' can also have
+#//  '+n' or '-n' appended to it and rickDiff will instead get n versions before
+#//  or after the version 'CURRENT' refers to, if it exists.
+#//
+#//  If the argument is of the form '+n' then rickDiff will get n versions newer
+#//  than the version of the previous argument.  '-n' is not supported as a
+#//  stand-alone argument because argParser tries to interpret it as a
+#//  non-existent option, and it's not really useful anyway.
+#//
+#//  Next, if the argument corresponds to a directory name under devRoot, then
+#//  rickDiff will use the corresponding file in that directory tree.
+#//
+#//  And finally, if nothing else matches, rickDiff passes the argument unchanged
+#//  to CVS where it can be interpreted as a version number, branch name or tag
+#//  name.
+#//
+#//  On errors, the fileName returned will be empty.
+#//
+#//******************************************************************************
+
+def createFileCommand( sourceFileName, versionArg, linuxPath, devDirs, localFlag, oldVersion='' ):
+    command = ''
+    fileName = ''
+    version = ''
+
+    tempDir = os.environ[ 'TEMP' ]
+
+    base, ext = os.path.splitext( os.path.basename( sourceFileName ) )
+
+    if versionArg == '':
+        if localFlag:
+            fileName = sourceFileName
+        else:
+            command = 'copy ' + sourceFileName + ' ' + tempDir + TO_DEV_NULL
+            fileName = os.path.join( tempDir, base + ext )
+    elif versionArg == 'HEAD':
+        fileName = os.path.join( tempDir, base + '.' + versionArg + ext )
+    elif versionArg.startswith( 'CURRENT' ):
+        increment = parseIncrement( versionArg[ 7: ] )
+
+        version = parseVersionFromEntries( sourceFileName )
+
+        if increment != 0:
+            version = incrementVersion( sourceFileName, version, increment )
+
+        fileName = os.path.join( tempDir, base + '.' + version + ext )
+
+        command = 'cvs co -p -r ' + version + ' ' + linuxPath + ' > ' + fileName + ERR_DEV_NULL
+    elif versionArg[ 0 ] == '+':
+        version = incrementVersion( sourceFileName, oldVersion, int( versionArg[ 1: ] ) )
+
+        fileName = os.path.join( tempDir, base + '.' + version + ext )
+        command = 'cvs co -p -r ' + version + ' ' + linuxPath + ' > ' + fileName + ERR_DEV_NULL
+    elif versionArg in devDirs:
+        source = buildDevFileName( devRoot, sourceFileName, versionArg )
+
+        if not os.path.isfile( source ):
+            raise Exception( "File '" + source + "' does not appear to exist." )
+
+        version = versionArg
+
+        fileName = os.path.join( tempDir, base + '.' + version + ext )
+        command = 'copy ' + source + ' ' + fileName + TO_DEV_NULL
+
+        if localFlag:
+            fileName = buildDevFileName( devRoot, sourceFileName, version )
+        else:
+            fileName = os.path.join( tempDir, base + '.' + version + ext )
+            command = 'copy ' + source + ' ' + fileName + TO_DEV_NULL
+    else:
+        version = versionArg
+        fileName = os.path.join( tempDir, base + '.' + version + ext )
+        command = 'cvs co -p -r ' + version + ' ' + linuxPath + ' > ' + fileName + ERR_DEV_NULL
+
+    return command, fileName, version
+
+
+
+#//******************************************************************************
+#//
+#//  retrieveFile
+#//
+#//******************************************************************************
+
+def retrieveFile( command, ordinal, version, fileName, sourceFileName, astyle, skip_dos2unix ):
+    print( '\rRetrieving ' + ordinal + ' file...\r', end='' )
+
+    os.system( command )
+
+    if os.stat( fileName ).st_size == 0:
+        raise Exception( "Version '" + version + "' not found for file '" + sourceFileName + "'" )
+
+    print( '\rFormatting ' + ordinal + ' file...\r', end='' )
+
+    if astyle:
+        os.system( 'astyle ' + fileName + TO_DEV_NULL )
+    elif not skip_dos2unix:
+        os.system( 'dos2unix ' + fileName + TO_DEV_NULL )
+        os.system( 'unix2dos ' + fileName + TO_DEV_NULL )
+
+    print( '\r                             \r', end='' )
+
+
+#//******************************************************************************
+#//
+#//  handleArgument
+#//
+#//******************************************************************************
+
+def handleArgument( ordinal, sourceFileName, linuxPath, devDirs, versionArg, args, oldVersion='' ):
+    try:
+        command, fileName, version = \
+               createFileCommand( sourceFileName, versionArg, linuxPath, devDirs, args.local, oldVersion )
+    except Exception as error:
+        print( PROGRAM_NAME + ": {0}".format( error ) )
+        return ''
+
+    # execute the command for the third file (if we need to)
+    if command != '':
+        if args.test:
+            print( command )
+        else:
+            try:
+                retrieveFile( command, ordinal, version, fileName, sourceFileName,
+                              args.astyle, args.skip_dos2unix )
+            except Exception as error:
+                print( PROGRAM_NAME + ": {0}".format( error ) )
+                return ''
+
+    return version, fileName
 
 
 #//************************************************************************************************
@@ -247,217 +388,27 @@ rickDiff does leave files in the %TEMP directory when it is done.
 
     base, ext = os.path.splitext( os.path.basename( sourceFileName ) )
 
-    tempDir = os.environ[ 'TEMP' ]
-
-    # determine what the first file should be
+    # parse the first version argument and build the shell command
     if firstVersion == '':
         firstVersion = 'CURRENT'
 
-    executeCommand = True
+    firstVersion, firstFileName = handleArgument( 'first', sourceFileName, linuxPath, devDirs, firstVersion, args )
 
-    # parse the first version argument and build the shell command
-    if firstVersion == 'HEAD':
-        firstFileName = os.path.join( tempDir, base + '.' + firstVersion + ext )
-        command = 'cvs co -p ' + linuxPath + ' > ' + firstFileName + ERR_DEV_NULL
-    if firstVersion.startswith( 'CURRENT' ):
-        increment = parseIncrement( firstVersion[ 7: ] )
+    if firstVersion == '':
+        return
 
-        try:
-            firstVersion = parseVersionFromEntries( sourceFileName )
-        except Exception as error:
-            print( PROGRAM_NAME + ": {0}".format( error ) )
-            return
+    secondVersion, secondFileName = \
+            handleArgument( 'second', sourceFileName, linuxPath, devDirs, secondVersion, args, firstVersion )
 
-        if increment != 0:
-            firstVersion = incrementVersion( sourceFileName, firstVersion, increment )
-
-        firstFileName = os.path.join( tempDir, base + '.' + firstVersion + ext )
-
-        command = 'cvs co -p -r ' + firstVersion + ' ' + linuxPath + ' > ' + firstFileName + ERR_DEV_NULL
-    elif firstVersion in devDirs:
-        source = buildDevFileName( devRoot, sourceFileName, firstVersion )
-
-        if not os.path.isfile( source ):
-            print( "File '" + source + "' does not appear to exist." )
-            return
-
-        if args.local:
-            firstFileName = buildDevFileName( devRoot, sourceFileName, firstVersion )
-            executeCommand = False
-        else:
-            firstFileName = os.path.join( tempDir, base + '.' + firstVersion + ext )
-            command = 'copy ' + source + ' ' + firstFileName + TO_DEV_NULL
-    else:
-        firstFileName = os.path.join( tempDir, base + '.' + firstVersion + ext )
-        command = 'cvs co -p -r ' + firstVersion + ' ' + linuxPath + ' > ' + firstFileName + ERR_DEV_NULL
-
-    # execute the command for the first file
-    if executeCommand:
-        if args.test:
-            print( command )
-        else:
-            print( '\rRetrieving first file...\r', end='' )
-
-            os.system( command )
-
-            if os.stat( firstFileName ).st_size == 0:
-                print( "Version '" + firstVersion + "' not found for file '" + base + ext + "'" )
-                return
-
-            print( '\rFormatting first file...\r', end='' )
-
-            if args.astyle:
-                os.system( 'astyle ' + firstFileName + TO_DEV_NULL )
-            elif not args.skip_dos2unix:
-                os.system( 'dos2unix ' + firstFileName + TO_DEV_NULL )
-                os.system( 'unix2dos ' + firstFileName + TO_DEV_NULL )
-
-            print( '\r                        \r', end='' )
-
-    executeCommand = True
-    checkedOut = True
-
-    # parse the second version argument and build the shell command
     if secondVersion == '':
-        if args.local:
-            secondFileName = sourceFileName
-            executeCommand = False
-        else:
-            command = 'copy ' + sourceFileName + ' ' + tempDir + TO_DEV_NULL
-            checkedOut = False
-            secondFileName = os.path.join( tempDir, base + ext )
-    elif secondVersion == 'HEAD':
-        secondFileName = os.path.join( tempDir, base + '.' + secondVersion + ext )
-    elif secondVersion.startswith( 'CURRENT' ):
-        increment = parseIncrement( secondVersion[ 7: ] )
-
-        try:
-            secondVersion = parseVersionFromEntries( sourceFileName )
-        except Exception as error:
-            print( PROGRAM_NAME + ": {0}".format( error ) )
-            return
-
-        if increment != 0:
-            secondVersion = incrementVersion( secondVersion, increment )
-
-        secondFileName = os.path.join( tempDir, base + '.' + secondVersion + ext )
-
-        command = 'cvs co -p -r ' + secondVersion + ' ' + linuxPath + ' > ' + secondFileName + ERR_DEV_NULL
-    elif secondVersion[ 0 ] == '+':
-        secondVersion = incrementVersion( sourceFileName, firstVersion, int( secondVersion[ 1: ] ) )
-        secondFileName = os.path.join( tempDir, base + '.' + secondVersion + ext )
-        command = 'cvs co -p -r ' + secondVersion + ' ' + linuxPath + ' > ' + secondFileName + ERR_DEV_NULL
-    elif secondVersion in devDirs:
-        source = buildDevFileName( devRoot, sourceFileName, secondVersion )
-
-        if not os.path.isfile( source ):
-            print( "File '" + source + "' does not appear to exist." )
-            return
-
-        secondFileName = os.path.join( tempDir, base + '.' + secondVersion + ext )
-        command = 'copy ' + source + ' ' + secondFileName + TO_DEV_NULL
-    else:
-        secondFileName = os.path.join( tempDir, base + '.' + secondVersion + ext )
-        command = 'cvs co -p -r ' + secondVersion + ' ' + linuxPath + ' > ' + secondFileName + ERR_DEV_NULL
-
-    # execute the command for the second file (if we need to)
-    if executeCommand:
-        if args.test:
-            print( command )
-        else:
-            print( '\rRetrieving second file...\r', end='' )
-
-            os.system( command )
-
-            if os.stat( secondFileName ).st_size == 0:
-                print( "Version '" + secondVersion + "' not found for file '" + base + ext + "'" )
-                return
-
-            print( '\rFormatting second file...\r', end='' )
-
-            if args.astyle:
-                os.system( 'astyle ' + secondFileName + TO_DEV_NULL )
-            elif not args.skip_dos2unix:
-                os.system( 'dos2unix ' + secondFileName + TO_DEV_NULL )
-                os.system( 'unix2dos ' + secondFileName + TO_DEV_NULL )
-
-            print( '\r                         \r', end='' )
-
-    executeCommand = True
-    checkedOut = True
-
-    thirdFileName = ''
+        return
 
     # parse the third version argument and build the shell command (if we need one)
-    if thirdVersion == '':
-        checkedOut = False
-
-        if args.three_way:
-            if args.local:
-                thirdFileName = sourceFileName
-                executeCommand = False
-            else:
-                thirdFileName = os.path.join( tempDir, base + ext )
-                command = 'copy ' + sourceFileName + ' ' + tempDir + TO_DEV_NULL
-        else:
-            executeCommand = False
-    elif thirdVersion == 'HEAD':
-        thirdFileName = os.path.join( tempDir, base + '.' + thirdVersion + ext )
-        command = 'cvs co -p ' + linuxPath + ' > ' + thirdFileName + ERR_DEV_NULL
-    elif thirdVersion.startswith( 'CURRENT' ):
-        increment = parseIncrement( thirdVersion[ 7: ] )
-
-        try:
-            thirdVersion = parseVersionFromEntries( sourceFileName )
-        except Exception as error:
-            print( PROGRAM_NAME + ": {0}".format( error ) )
-            return
-
-        if increment != 0:
-            thirdVersion = incrementVersion( sourceFileName, thirdVersion, increment )
-
-        thirdFileName = os.path.join( tempDir, base + '.' + thirdVersion + ext )
-
-        command = 'cvs co -p -r ' + thirdVersion + ' ' + linuxPath + ' > ' + thirdFileName + ERR_DEV_NULL
-    elif thirdVersion[ 0 ] == '+':
-        thirdVersion = incrementVersion( sourceFileName, secondVersion, int( thirdVersion[ 1: ] ) )
-        thirdFileName = os.path.join( tempDir, base + '.' + thirdVersion + ext )
-        command = 'cvs co -p -r ' + thirdVersion + ' ' + linuxPath + ' > ' + thirdFileName + ERR_DEV_NULL
-    elif thirdVersion in devDirs:
-        thirdFileName = os.path.join( tempDir, base + '.' + thirdVersion + ext )
-
-        source = buildDevFileName( devRoot, sourceFileName, thirdVersion )
-
-        if not os.path.isfile( source ):
-            print( "File '" + source + "' does not appear to exist." )
-            return
-
-        command = 'copy ' + source + ' ' + thirdFileName + TO_DEV_NULL
+    if thirdVersion != '' or args.three_way:
+        thirdVersion, thirdFileName = \
+                handleArgument( 'third', sourceFileName, linuxPath, devDirs, thirdVersion, args, firstVersion )
     else:
-        command = 'cvs co -p -r ' + thirdVersion + ' ' + linuxPath + ' > ' + thirdFileName + ERR_DEV_NULL
-
-    # execute the command for the third file (if we need to)
-    if executeCommand:
-        if args.test:
-            print( command )
-        else:
-            print( '\rRetrieving third file...\r', end='' )
-
-            os.system( command )
-
-            if os.stat( thirdFileName ).st_size == 0:
-                print( "Version '" + thirdVersion + "' not found for file '" + base + ext + "'" )
-                return
-
-            print( '\rFormatting third file...\r', end='' )
-
-            if args.astyle:
-                os.system( 'astyle ' + thirdFileName + TO_DEV_NULL )
-            elif not args.skip_dos2unix:
-                os.system( 'dos2unix ' + thirdFileName + TO_DEV_NULL )
-                os.system( 'unix2dos ' + thirdFileName + TO_DEV_NULL )
-
-            print( '\r                        \r', end='' )
+        thirdFileName = ''
 
     # we have everything, so let's launch meld
     if thirdFileName == '':
