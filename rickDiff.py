@@ -17,7 +17,7 @@ import tempfile
 #//************************************************************************************************
 
 PROGRAM_NAME = 'rickDiff'
-VERSION = '0.7.0'
+VERSION = '0.7.1'
 DESCRIPTION = 'compares CVS versions using meld'
 
 STD_DEV_NULL = ' > NUL'
@@ -304,6 +304,8 @@ rickDiff does leave files in the %TEMP directory when it is done.
                 print( "Version '" + firstVersion + "' not found for file '" + base + ext + "'" )
                 return
 
+            print( '\rFormatting first file...\r', end='' )
+
             if args.astyle:
                 os.system( 'astyle ' + firstFileName + TO_DEV_NULL )
             elif not args.skip_dos2unix:
@@ -370,6 +372,8 @@ rickDiff does leave files in the %TEMP directory when it is done.
             if os.stat( secondFileName ).st_size == 0:
                 print( "Version '" + secondVersion + "' not found for file '" + base + ext + "'" )
                 return
+
+            print( '\rFormatting second file...\r', end='' )
 
             if args.astyle:
                 os.system( 'astyle ' + secondFileName + TO_DEV_NULL )
@@ -445,6 +449,8 @@ rickDiff does leave files in the %TEMP directory when it is done.
                 print( "Version '" + thirdVersion + "' not found for file '" + base + ext + "'" )
                 return
 
+            print( '\rFormatting third file...\r', end='' )
+
             if args.astyle:
                 os.system( 'astyle ' + thirdFileName + TO_DEV_NULL )
             elif not args.skip_dos2unix:
@@ -468,7 +474,9 @@ rickDiff does leave files in the %TEMP directory when it is done.
     if args.test:
         print( command )
     else:
+        print( '\rLaunching Meld...\r', end='' )
         os.system( command )
+        print( '\r                 \r', end='' )
 
 
 #//**********************************************************************
