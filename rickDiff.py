@@ -17,7 +17,7 @@ import tempfile
 #//************************************************************************************************
 
 PROGRAM_NAME = 'rickDiff'
-VERSION = '0.9.0'
+VERSION = '0.9.1'
 DESCRIPTION = 'compares CVS versions using meld'
 
 STD_DEV_NULL = ' > NUL'
@@ -87,7 +87,7 @@ def incrementVersionSimple( version, increment ):
 def incrementVersion( targetFile, version, increment ):
     print( '\rParsing CVS log...\r', end='' )
 
-    process = subprocess.Popen( [ 'cvs', 'log', '-Nb', targetFile ], stdout=subprocess.PIPE,
+    process = subprocess.Popen( [ 'cvs', 'log', '-N', targetFile ], stdout=subprocess.PIPE,
                                   shell=True, universal_newlines=True )
 
     versions = [ ]
