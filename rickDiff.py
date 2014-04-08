@@ -17,7 +17,7 @@ import tempfile
 #//************************************************************************************************
 
 PROGRAM_NAME = 'rickDiff'
-VERSION = '0.8.0'
+VERSION = '0.8.1'
 DESCRIPTION = 'compares CVS versions using meld'
 
 STD_DEV_NULL = ' > NUL'
@@ -285,6 +285,8 @@ def retrieveFile( command, ordinal, version, fileName, sourceFileName, astyle, s
 #//
 #//  handleArgument
 #//
+#//  On errors, the fileName returned will be empty.
+#//
 #//******************************************************************************
 
 def handleArgument( ordinal, sourceFileName, linuxPath, devDirs, versionArg, args, oldVersion='' ):
@@ -293,7 +295,7 @@ def handleArgument( ordinal, sourceFileName, linuxPath, devDirs, versionArg, arg
                createFileCommand( sourceFileName, versionArg, linuxPath, devDirs, args.local, oldVersion )
     except Exception as error:
         print( PROGRAM_NAME + ": {0}".format( error ) )
-        return ''
+        return '', ''
 
     # execute the command for the third file (if we need to)
     if command != '':
@@ -305,7 +307,7 @@ def handleArgument( ordinal, sourceFileName, linuxPath, devDirs, versionArg, arg
                               args.astyle, args.skip_dos2unix )
             except Exception as error:
                 print( PROGRAM_NAME + ": {0}".format( error ) )
-                return ''
+                return '', ''
 
     return version, fileName
 
@@ -394,13 +396,13 @@ rickDiff does leave files in the %TEMP directory when it is done.
 
     firstVersion, firstFileName = handleArgument( 'first', sourceFileName, linuxPath, devDirs, firstVersion, args )
 
-    if firstVersion == '':
+    if firstFileName == '':
         return
 
     secondVersion, secondFileName = \
             handleArgument( 'second', sourceFileName, linuxPath, devDirs, secondVersion, args, firstVersion )
 
-    if secondVersion == '':
+    if secondFileName == '':
         return
 
     # parse the third version argument and build the shell command (if we need one)
