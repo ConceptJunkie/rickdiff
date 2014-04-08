@@ -17,7 +17,7 @@ import tempfile
 #//************************************************************************************************
 
 PROGRAM_NAME = 'rickDiff'
-VERSION = '0.9.4'
+VERSION = '0.10.0'
 DESCRIPTION = 'compares CVS versions using meld'
 
 STD_DEV_NULL = ' > NUL'
@@ -89,7 +89,7 @@ def incrementVersion( targetFile, version, increment ):
     print( '\rParsing CVS log...\r', end='' )
 
     process = subprocess.Popen( [ 'cvs', 'log', '-N', targetFile ], stdout=subprocess.PIPE,
-                                  shell=True, universal_newlines=True )
+                                 shell=True, universal_newlines=True )
 
     versions = [ ]
 
@@ -380,7 +380,15 @@ rickDiff does leave files in the %TEMP directory when it is done.
                          help='skips dos2unix-unix2dos step, which is intended to fix line endings' )
     parser.add_argument( '-l', '--local', action='store_true', help='use the local file, don\'t check out from the HEAD' )
     parser.add_argument( '-t', '--test', action='store_true', help='print commands, don\'t execute them' )
-    parser.add_argument( '-r', '--reverse', action='store_true', help='load the files into Meld in reverse order' )
+
+    group = parser.add_mutually_exclusive_group( )
+
+    group.add_argument( '-r', '--reverse', action='store_true', help='load the files into Meld in reverse order' )
+    group.add_argument( '-x1', '--exchange12', action='store_true', help='exchange files 1 and 2 when loading Meld' )
+    group.add_argument( '-x2', '--exchange23', action='store_true', help='exchange files 2 and 3 when loading Meld' )
+    group.add_argument( '-x3', '--exchange13', action='store_true', help='exchange files 1 and 3 when loading Meld' )
+    group.add_argument( '-xr', '--exchanger', action='store_true', help='rotate files right (3, 1, 2)' )
+    group.add_argument( '-xl', '--exchangel', action='store_true', help='rotate files left (2, 3, 1)' )
 
     group = parser.add_mutually_exclusive_group( )
     group.add_argument( '-a', '--astyle', action='store_true', help='run astyle on non-local files before comparison' )
@@ -466,13 +474,23 @@ rickDiff does leave files in the %TEMP directory when it is done.
 
     # we have everything, so let's launch meld
     if thirdFileName == '':
-        if args.reverse:
+        if args.reverse or args.exchange12:
             command = 'meld ' + secondFileName + ' ' + firstFileName
         else:
             command = 'meld ' + firstFileName + ' ' + secondFileName
     else:
         if args.reverse:
             command = 'meld ' + thirdFileName + ' ' + secondFileName + ' ' + firstFileName
+        elif args.exchange12:
+            command = 'meld ' + secondFileName + ' ' + firstFileName + ' ' + thirdFileName
+        elif args.exchange23:
+            command = 'meld ' + firstFileName + ' ' + thirdFileName + ' ' + secondFileName
+        elif args.exchange13:
+            command = 'meld ' + thirdFileName + ' ' + secondFileName + ' ' + firstFileName
+        elif args.exchanger:
+            command = 'meld ' + thirdFileName + ' ' + firstFileName + ' ' + secondFileName
+        elif args.exchangel:
+            command = 'meld ' + secondFileName + ' ' + thirdFileName + ' ' + firstFileName
         else:
             command = 'meld ' + firstFileName + ' ' + secondFileName + ' ' + thirdFileName
 
