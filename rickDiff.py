@@ -17,13 +17,15 @@ import tempfile
 #//************************************************************************************************
 
 PROGRAM_NAME = 'rickDiff'
-VERSION = '0.10.0'
+VERSION = '0.10.2'
 DESCRIPTION = 'compares CVS versions using meld'
 
 STD_DEV_NULL = ' > NUL'
 ERR_DEV_NULL = ' 2> NUL'
 
 TO_DEV_NULL = STD_DEV_NULL + ERR_DEV_NULL
+
+CLEAR_LINE = '\r                             \r'
 
 
 #//******************************************************************************
@@ -55,6 +57,7 @@ def parseIncrement( increment ):
 #//              version string (and it can be negative, but the resulting
 #//              version number will be invalid if the last token ends up less
 #//              than 1
+#//
 #//******************************************************************************
 
 def incrementVersionSimple( version, increment ):
@@ -107,7 +110,7 @@ def incrementVersion( targetFile, version, increment ):
     # remember versions in order from newest to oldest
     newIndex = index - increment
 
-    print( '\r                  \r', end='' )
+    print( CLEAR_LINE, end='' )
 
     if newIndex > len( versions ):
         return '1.1'
@@ -231,7 +234,7 @@ def createFileCommand( devRoot, sourceFileName, versionArg, linuxPath, devDirs, 
 
     if versionArg == '':
         if localFlag:
-            fileName = sourceFileName
+            fileName = os.path.join( os.getcwd( ), sourceFileName )
         else:
             command = 'copy ' + sourceFileName + ' ' + tempDir + TO_DEV_NULL
             fileName = os.path.join( tempDir, base + ext )
@@ -305,8 +308,14 @@ def retrieveFile( command, ordinal, version, fileName, sourceFileName, astyle, u
         os.system( 'dos2unix ' + fileName + TO_DEV_NULL )
         os.system( 'unix2dos ' + fileName + TO_DEV_NULL )
 
-    print( '\r                             \r', end='' )
-    print( ordinal + " file version: " + version )
+    print( CLEAR_LINE, end='' )
+
+    print( ordinal + " file version:  ", end='' )
+
+    if version == '':
+        print( 'local file (in $TEMP)' )
+    else:
+        print( version )
 
 
 #//******************************************************************************
@@ -497,9 +506,10 @@ rickDiff does leave files in the %TEMP directory when it is done.
     if args.test:
         print( command )
     else:
-        print( '\rLaunching Meld...\r', end='' )
+        print( CLEAR_LINE, end='' )
+        print( 'Launching Meld...\r', end='' )
         os.system( command )
-        print( '\r                 \r', end='' )
+        print( CLEAR_LINE, end='' )
 
 
 #//**********************************************************************
