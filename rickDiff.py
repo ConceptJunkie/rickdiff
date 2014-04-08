@@ -17,7 +17,7 @@ import tempfile
 #//************************************************************************************************
 
 PROGRAM_NAME = 'rickDiff'
-VERSION = '0.9.2'
+VERSION = '0.9.3'
 DESCRIPTION = 'compares CVS versions using meld'
 
 STD_DEV_NULL = ' > NUL'
@@ -347,8 +347,12 @@ def handleArgument( ordinal, sourceFileName, linuxPath, devDirs, versionArg, arg
 #//************************************************************************************************
 
 def main( ):
-    parser = argparse.ArgumentParser( prog=PROGRAM_NAME, description=PROGRAM_NAME + ' - ' + VERSION + ' - ' + DESCRIPTION,
-                                      formatter_class=RawTextHelpFormatter, epilog=
+    print( )
+
+    parser = argparse.ArgumentParser( description=PROGRAM_NAME + ' ' + VERSION + ' - ' + DESCRIPTION,
+                                      formatter_class=RawTextHelpFormatter,
+                                      usage = PROGRAM_NAME + ' [options] fileName [ firstVersion [ secondVersion [ thirdVersion ] ] ]',
+                                      epilog=
 '''
 rickDiff relies on the existence of the file 'CVS/Repository' to figure out
 where 'fileName' is, uses the environment variable 'TEMP', and expects 'cvs'
@@ -360,7 +364,8 @@ devRoot means that it should compare the appropriate file under that directory.\
 rickDiff recognizes some special version names:  'HEAD' for the CVS trunk
 version; 'CURRENT' for the currently checked out version (according to
 'CVS/Entries'.  'CURRENT' can be followed by '-n' where n is a number, and
-rickDiff will retrieve n versions back, according to 'cvs log -b'.
+rickDiff will retrieve n versions back, according to 'cvs log'.  This may be
+somewhat unpredictable when branches are involved.
 
 In addition, a version name after the first of the form '+n' will be translated
 into the previously specified version incremented by n versions.\n
@@ -370,13 +375,6 @@ Any other name is passed on to CVS, so branch names and tag names can be used.\n
 rickDiff does leave files in the %TEMP directory when it is done.
 ''' )
 
-    parser.add_argument( 'fileName', nargs='?', default='', help='the file to compare' )
-    parser.add_argument( 'firstVersion', nargs='?', default='',
-                         help='first version to compare (optional: otherwise current version)' )
-    parser.add_argument( 'secondVersion', nargs='?', default='',
-                         help='second version to compare (optional: otherwise local checked out file)' )
-    parser.add_argument( 'thirdVersion', nargs='?', default='',
-                         help='third version to compare (optional: if --three-way then local checked out file, otherwise two-way comparison)' )
     parser.add_argument( '-3', '--three_way', action='store_true', help='three-way comparison' )
     parser.add_argument( '-d', '--skip_dos2unix', action='store_true',
                          help='skips dos2unix-unix2dos step, which is intended to fix line endings' )
@@ -388,9 +386,35 @@ rickDiff does leave files in the %TEMP directory when it is done.
     group.add_argument( '-a', '--astyle', action='store_true', help='run astyle on non-local files before comparison' )
     group.add_argument( '-u', '--uncrustify', action='store_true', help='run uncrustify on non-local files before comparison' )
 
-    args = parser.parse_args( )
+    # let's do a little preprocessing of the argument list because argparse is missing a few pieces of functionality
+    new_argv = list( )
 
-    if args.fileName == '':
+    prefixList = '-'
+
+    fileName = ''
+    firstVersion = ''
+    secondVersion = ''
+    thirdVersion = ''
+
+    for arg in sys.argv[ 1: ]:
+        if arg[ 0 ] not in prefixList:
+            if fileName == '':
+                fileName = arg
+            elif firstVersion == '':
+                firstVersion = arg
+            elif secondVersion == '':
+                secondVersion = arg
+            elif thirdVersion == '':
+                thirdVersion = arg
+            else:
+                print( 'ignoring extra arg: ' + arg )
+        else:
+            new_argv.append( arg )
+
+    # let argparse handle the rest
+    args = parser.parse_args( new_argv )
+
+    if fileName == '':
         parser.print_help( )
         return
 
@@ -403,13 +427,9 @@ rickDiff does leave files in the %TEMP directory when it is done.
         return
 
     # parse the arguments
-    linuxPath += '/' + args.fileName.replace( '\\', '/' )
+    linuxPath += '/' + fileName.replace( '\\', '/' )
 
-    sourceFileName = args.fileName.replace( '/', '\\' )
-
-    firstVersion = args.firstVersion
-    secondVersion = args.secondVersion
-    thirdVersion = args.thirdVersion
+    sourceFileName = fileName.replace( '/', '\\' )
 
     devRoot = 'd:\\dev'
 
