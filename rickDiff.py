@@ -17,7 +17,7 @@ import tempfile
 #//************************************************************************************************
 
 PROGRAM_NAME = 'rickDiff'
-VERSION = '0.8.1'
+VERSION = '0.9.0'
 DESCRIPTION = 'compares CVS versions using meld'
 
 STD_DEV_NULL = ' > NUL'
@@ -262,7 +262,7 @@ def createFileCommand( sourceFileName, versionArg, linuxPath, devDirs, localFlag
 #//
 #//******************************************************************************
 
-def retrieveFile( command, ordinal, version, fileName, sourceFileName, astyle, skip_dos2unix ):
+def retrieveFile( command, ordinal, version, fileName, sourceFileName, astyle, uncrustify, skip_dos2unix ):
     print( '\rRetrieving ' + ordinal + ' file...\r', end='' )
 
     os.system( command )
@@ -274,6 +274,9 @@ def retrieveFile( command, ordinal, version, fileName, sourceFileName, astyle, s
 
     if astyle:
         os.system( 'astyle ' + fileName + TO_DEV_NULL )
+    elif uncrustify:
+        os.system( 'astyle ' + fileName + TO_DEV_NULL )
+        os.system( 'move /y ' + fileName + '.uncrustify ' + fileName + TO_DEV_NULL )
     elif not skip_dos2unix:
         os.system( 'dos2unix ' + fileName + TO_DEV_NULL )
         os.system( 'unix2dos ' + fileName + TO_DEV_NULL )
@@ -303,8 +306,8 @@ def handleArgument( ordinal, sourceFileName, linuxPath, devDirs, versionArg, arg
             print( command )
         else:
             try:
-                retrieveFile( command, ordinal, version, fileName, sourceFileName,
-                              args.astyle, args.skip_dos2unix )
+                retrieveFile( command, ordinal, version, fileName, sourceFileName, args.astyle,
+                              args.uncrustify, args.skip_dos2unix )
             except Exception as error:
                 print( PROGRAM_NAME + ": {0}".format( error ) )
                 return '', ''
@@ -350,12 +353,15 @@ rickDiff does leave files in the %TEMP directory when it is done.
     parser.add_argument( 'thirdVersion', nargs='?', default='',
                          help='third version to compare (optional: if --three-way then local checked out file, otherwise two-way comparison)' )
     parser.add_argument( '-3', '--three_way', action='store_true', help='three-way comparison' )
-    parser.add_argument( '-a', '--astyle', action='store_true', help='run astyle on non-local files before comparison' )
     parser.add_argument( '-d', '--skip_dos2unix', action='store_true',
                          help='skips dos2unix-unix2dos step, which is intended to fix line endings' )
     parser.add_argument( '-l', '--local', action='store_true', help='use the local file, don\'t check out from the HEAD' )
     parser.add_argument( '-t', '--test', action='store_true', help='print commands, don\'t execute them' )
     parser.add_argument( '-r', '--reverse', action='store_true', help='load the files into Meld in reverse order' )
+
+    group = parser.add_mutually_exclusive_group( )
+    group.add_argument( '-a', '--astyle', action='store_true', help='run astyle on non-local files before comparison' )
+    group.add_argument( '-u', '--uncrustify', action='store_true', help='run uncrustify on non-local files before comparison' )
 
     args = parser.parse_args( )
 
