@@ -5,7 +5,9 @@ from argparse import RawTextHelpFormatter
 import codecs
 import fnmatch
 import os
+import subprocess
 import sys
+import tempfile
 
 
 #//************************************************************************************************
@@ -15,7 +17,7 @@ import sys
 #//************************************************************************************************
 
 PROGRAM_NAME = 'rickDiff'
-VERSION = '0.6.0'
+VERSION = '0.7.0'
 DESCRIPTION = 'compares CVS versions using meld'
 
 STD_DEV_NULL = ' > NUL'
@@ -26,15 +28,36 @@ TO_DEV_NULL = STD_DEV_NULL + ERR_DEV_NULL
 
 #//******************************************************************************
 #//
-#//  incrementVersion
+#//  parseIncrement
 #//
-#//  version - version string
-#//  increment - integer value of how much to increment the last token in the
-#//              version string (and it can be negative if you really want)
+#//  parses '+n' and '-n' to return an integer value, and 0 if anything else
 #//
 #//******************************************************************************
 
-def incrementVersion( version, increment ):
+def parseIncrement( increment ):
+    if len( increment ) < 2:
+        return 0;
+
+    if increment[ 0 ] == '+':
+        return int( increment[ 1: ] )
+    elif increment[ 0 ] == '-':
+        return -int( increment[ 1: ] )
+    else:
+        return 0
+
+
+#//******************************************************************************
+#//
+#//  incrementVersionSimple
+#//
+#//  version - version string
+#//  increment - integer value of how much to increment the last token in the
+#//              version string (and it can be negative, but the resulting
+#//              version number will be invalid if the last token ends up less
+#//              than 1
+#//******************************************************************************
+
+def incrementVersionSimple( version, increment ):
     if increment == 0:
         return version
     else:
@@ -42,6 +65,54 @@ def incrementVersion( version, increment ):
         tokens[ -1 ] = str( int( tokens[ -1 ] ) + increment )
 
         return '.'.join( tokens )
+
+
+#//******************************************************************************
+#//
+#//  incrementVersion
+#//
+#//  increment the version number forwards or backwards based on cvs log
+#//
+#//  version - version string
+#//  increment - integer value of how much to increment the version
+#//              (positive or negative)
+#//
+#//  If the increment goes higher then the current version, then it will call
+#//  incrementVersionSimple.  This may or may be a valid version number.
+#//
+#//  If the increment goes lower than 1.1, then it will return '1.1'
+#//
+#//******************************************************************************
+
+def incrementVersion( targetFile, version, increment ):
+    print( '\rParsing CVS log...\r', end='' )
+    process = subprocess.Popen( [ 'cvs', 'log', '-Nb', targetFile ], stdout=subprocess.PIPE, shell=True,
+                                universal_newlines=True )
+
+    versions = [ ]
+
+    index = -1
+
+    for line in process.stdout:
+        if str( line ).startswith( 'revision ' ):
+            newVersion = line[ 9 : -1 ]
+
+            versions.append( newVersion )
+
+            if ( index == -1 ) and ( newVersion == version ):
+                index = len( versions ) - 1
+
+    # remember versions in order from newest to oldest
+    newIndex = index - increment
+
+    print( '\r                  \r', end='' )
+
+    if newIndex > len( versions ):
+        return '1.1'
+    elif newIndex < 0:
+        return incrementVersionSimple( version, increment )
+    else:
+        return versions[ newIndex ]
 
 
 #//******************************************************************************
@@ -64,6 +135,9 @@ def parseVersionFromEntries( targetFile ):
 
     for line in codecs.open( entriesFileName, 'rU', 'ascii', 'replace' ):
         fields = line[ : -1 ].split( '/' )
+
+        if len( fields ) < 3:
+            break
 
         if ( fields[ 1 ] == fileName ):
             return fields[ 2 ]
@@ -114,9 +188,11 @@ devRoot means that it should compare the appropriate file under that directory.\
 
 rickDiff recognizes some special version names:  'HEAD' for the CVS trunk
 version; 'CURRENT' for the currently checked out version (according to
-'CVS/Entries'.  In addition, a version name after the first of the form '+n'
-will be translated into the previously specified version incremented by n
-versions.\n
+'CVS/Entries'.  'CURRENT' can be followed by '-n' where n is a number, and
+rickDiff will retrieve n versions back, according to 'cvs log -b'.
+
+In addition, a version name after the first of the form '+n' will be translated
+into the previously specified version incremented by n versions.\n
 
 Any other name is passed on to CVS, so branch names and tag names can be used.\n
 
@@ -183,15 +259,21 @@ rickDiff does leave files in the %TEMP directory when it is done.
     if firstVersion == 'HEAD':
         firstFileName = os.path.join( tempDir, base + '.' + firstVersion + ext )
         command = 'cvs co -p ' + linuxPath + ' > ' + firstFileName + ERR_DEV_NULL
-    if firstVersion == 'CURRENT':
+    if firstVersion.startswith( 'CURRENT' ):
+        increment = parseIncrement( firstVersion[ 7: ] )
+
         try:
             firstVersion = parseVersionFromEntries( sourceFileName )
         except Exception as error:
             print( PROGRAM_NAME + ": {0}".format( error ) )
             return
 
+        if increment != 0:
+            firstVersion = incrementVersion( sourceFileName, firstVersion, increment )
+
         firstFileName = os.path.join( tempDir, base + '.' + firstVersion + ext )
-        command = 'cvs co -p ' + linuxPath + ' > ' + firstFileName + ERR_DEV_NULL
+
+        command = 'cvs co -p -r ' + firstVersion + ' ' + linuxPath + ' > ' + firstFileName + ERR_DEV_NULL
     elif firstVersion in devDirs:
         source = buildDevFileName( devRoot, sourceFileName, firstVersion )
 
@@ -214,6 +296,8 @@ rickDiff does leave files in the %TEMP directory when it is done.
         if args.test:
             print( command )
         else:
+            print( '\rRetrieving first file...\r', end='' )
+
             os.system( command )
 
             if os.stat( firstFileName ).st_size == 0:
@@ -225,6 +309,8 @@ rickDiff does leave files in the %TEMP directory when it is done.
             elif not args.skip_dos2unix:
                 os.system( 'dos2unix ' + firstFileName + TO_DEV_NULL )
                 os.system( 'unix2dos ' + firstFileName + TO_DEV_NULL )
+
+            print( '\r                        \r', end='' )
 
     executeCommand = True
     checkedOut = True
@@ -240,11 +326,23 @@ rickDiff does leave files in the %TEMP directory when it is done.
             secondFileName = os.path.join( tempDir, base + ext )
     elif secondVersion == 'HEAD':
         secondFileName = os.path.join( tempDir, base + '.' + secondVersion + ext )
-    elif secondVersion == 'CURRENT':
-        secondVersion = parseVersionFromEntries( linuxPath )
+    elif secondVersion.startswith( 'CURRENT' ):
+        increment = parseIncrement( secondVersion[ 7: ] )
+
+        try:
+            secondVersion = parseVersionFromEntries( sourceFileName )
+        except Exception as error:
+            print( PROGRAM_NAME + ": {0}".format( error ) )
+            return
+
+        if increment != 0:
+            secondVersion = incrementVersion( secondVersion, increment )
+
         secondFileName = os.path.join( tempDir, base + '.' + secondVersion + ext )
+
+        command = 'cvs co -p -r ' + secondVersion + ' ' + linuxPath + ' > ' + secondFileName + ERR_DEV_NULL
     elif secondVersion[ 0 ] == '+':
-        secondVersion = incrementVersion( firstVersion, int( secondVersion[ 1: ] ) )
+        secondVersion = incrementVersion( sourceFileName, firstVersion, int( secondVersion[ 1: ] ) )
         secondFileName = os.path.join( tempDir, base + '.' + secondVersion + ext )
         command = 'cvs co -p -r ' + secondVersion + ' ' + linuxPath + ' > ' + secondFileName + ERR_DEV_NULL
     elif secondVersion in devDirs:
@@ -265,6 +363,8 @@ rickDiff does leave files in the %TEMP directory when it is done.
         if args.test:
             print( command )
         else:
+            print( '\rRetrieving second file...\r', end='' )
+
             os.system( command )
 
             if os.stat( secondFileName ).st_size == 0:
@@ -276,6 +376,8 @@ rickDiff does leave files in the %TEMP directory when it is done.
             elif not args.skip_dos2unix:
                 os.system( 'dos2unix ' + secondFileName + TO_DEV_NULL )
                 os.system( 'unix2dos ' + secondFileName + TO_DEV_NULL )
+
+            print( '\r                         \r', end='' )
 
     executeCommand = True
     checkedOut = True
@@ -298,8 +400,23 @@ rickDiff does leave files in the %TEMP directory when it is done.
     elif thirdVersion == 'HEAD':
         thirdFileName = os.path.join( tempDir, base + '.' + thirdVersion + ext )
         command = 'cvs co -p ' + linuxPath + ' > ' + thirdFileName + ERR_DEV_NULL
+    elif thirdVersion.startswith( 'CURRENT' ):
+        increment = parseIncrement( thirdVersion[ 7: ] )
+
+        try:
+            thirdVersion = parseVersionFromEntries( sourceFileName )
+        except Exception as error:
+            print( PROGRAM_NAME + ": {0}".format( error ) )
+            return
+
+        if increment != 0:
+            thirdVersion = incrementVersion( sourceFileName, thirdVersion, increment )
+
+        thirdFileName = os.path.join( tempDir, base + '.' + thirdVersion + ext )
+
+        command = 'cvs co -p -r ' + thirdVersion + ' ' + linuxPath + ' > ' + thirdFileName + ERR_DEV_NULL
     elif thirdVersion[ 0 ] == '+':
-        thirdVersion = incrementVersion( secondVersion, int( thirdVersion[ 1: ] ) )
+        thirdVersion = incrementVersion( sourceFileName, secondVersion, int( thirdVersion[ 1: ] ) )
         thirdFileName = os.path.join( tempDir, base + '.' + thirdVersion + ext )
         command = 'cvs co -p -r ' + thirdVersion + ' ' + linuxPath + ' > ' + thirdFileName + ERR_DEV_NULL
     elif thirdVersion in devDirs:
@@ -320,6 +437,8 @@ rickDiff does leave files in the %TEMP directory when it is done.
         if args.test:
             print( command )
         else:
+            print( '\rRetrieving third file...\r', end='' )
+
             os.system( command )
 
             if os.stat( thirdFileName ).st_size == 0:
@@ -331,6 +450,8 @@ rickDiff does leave files in the %TEMP directory when it is done.
             elif not args.skip_dos2unix:
                 os.system( 'dos2unix ' + thirdFileName + TO_DEV_NULL )
                 os.system( 'unix2dos ' + thirdFileName + TO_DEV_NULL )
+
+            print( '\r                        \r', end='' )
 
     # we have everything, so let's launch meld
     if thirdFileName == '':
