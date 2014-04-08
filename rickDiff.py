@@ -17,7 +17,7 @@ import tempfile
 #//************************************************************************************************
 
 PROGRAM_NAME = 'rickDiff'
-VERSION = '0.9.1'
+VERSION = '0.9.2'
 DESCRIPTION = 'compares CVS versions using meld'
 
 STD_DEV_NULL = ' > NUL'
@@ -73,6 +73,7 @@ def incrementVersionSimple( version, increment ):
 #//
 #//  increment the version number forwards or backwards based on cvs log
 #//
+#//  targetFile - file whose version number we are incrementing
 #//  version - version string
 #//  increment - integer value of how much to increment the version
 #//              (positive or negative)
@@ -114,6 +115,27 @@ def incrementVersion( targetFile, version, increment ):
         return incrementVersionSimple( version, increment )
     else:
         return versions[ newIndex ]
+
+
+#//******************************************************************************
+#//
+#//  getHeadVersion
+#//
+#//  get the head version number from the cvs log
+#//
+#//******************************************************************************
+
+def getHeadVersion( targetFile ):
+    print( '\rParsing CVS log...\r', end='' )
+
+    process = subprocess.Popen( [ 'cvs', 'log', '-N', targetFile ], stdout=subprocess.PIPE,
+                                  shell=True, universal_newlines=True )
+
+    for line in process.stdout:
+        if str( line ).startswith( 'head: ' ):
+            return line[ 6 : -1 ]
+
+    return 'ERROR'
 
 
 #//******************************************************************************
@@ -214,7 +236,9 @@ def createFileCommand( sourceFileName, versionArg, linuxPath, devDirs, localFlag
             command = 'copy ' + sourceFileName + ' ' + tempDir + TO_DEV_NULL
             fileName = os.path.join( tempDir, base + ext )
     elif versionArg == 'HEAD':
-        fileName = os.path.join( tempDir, base + '.' + versionArg + ext )
+        version = getHeadVersion( sourceFileName )
+        fileName = os.path.join( tempDir, base + '.' + version + ext )
+        command = 'cvs co -p -r ' + version + ' ' + linuxPath + ' > ' + fileName + ERR_DEV_NULL
     elif versionArg.startswith( 'CURRENT' ):
         increment = parseIncrement( versionArg[ 7: ] )
 
@@ -282,6 +306,7 @@ def retrieveFile( command, ordinal, version, fileName, sourceFileName, astyle, u
         os.system( 'unix2dos ' + fileName + TO_DEV_NULL )
 
     print( '\r                             \r', end='' )
+    print( ordinal + " file version: " + version )
 
 
 #//******************************************************************************
