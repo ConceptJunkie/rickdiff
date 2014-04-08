@@ -17,7 +17,7 @@ import tempfile
 #//************************************************************************************************
 
 PROGRAM_NAME = 'rickDiff'
-VERSION = '0.9.3'
+VERSION = '0.9.4'
 DESCRIPTION = 'compares CVS versions using meld'
 
 STD_DEV_NULL = ' > NUL'
@@ -220,7 +220,7 @@ def buildDevFileName( devRoot, sourceFileName, dirName ):
 #//
 #//******************************************************************************
 
-def createFileCommand( sourceFileName, versionArg, linuxPath, devDirs, localFlag, oldVersion='' ):
+def createFileCommand( devRoot, sourceFileName, versionArg, linuxPath, devDirs, localFlag, oldVersion='' ):
     command = ''
     fileName = ''
     version = ''
@@ -317,10 +317,10 @@ def retrieveFile( command, ordinal, version, fileName, sourceFileName, astyle, u
 #//
 #//******************************************************************************
 
-def handleArgument( ordinal, sourceFileName, linuxPath, devDirs, versionArg, args, oldVersion='' ):
+def handleArgument( devRoot, ordinal, sourceFileName, linuxPath, devDirs, versionArg, args, oldVersion='' ):
     try:
         command, fileName, version = \
-               createFileCommand( sourceFileName, versionArg, linuxPath, devDirs, args.local, oldVersion )
+               createFileCommand( devRoot, sourceFileName, versionArg, linuxPath, devDirs, args.local, oldVersion )
     except Exception as error:
         print( PROGRAM_NAME + ": {0}".format( error ) )
         return '', ''
@@ -445,13 +445,14 @@ rickDiff does leave files in the %TEMP directory when it is done.
     if firstVersion == '':
         firstVersion = 'CURRENT'
 
-    firstVersion, firstFileName = handleArgument( 'first', sourceFileName, linuxPath, devDirs, firstVersion, args )
+    firstVersion, firstFileName = \
+            handleArgument( devRoot, 'first', sourceFileName, linuxPath, devDirs, firstVersion, args )
 
     if firstFileName == '':
         return
 
     secondVersion, secondFileName = \
-            handleArgument( 'second', sourceFileName, linuxPath, devDirs, secondVersion, args, firstVersion )
+            handleArgument( devRoot, 'second', sourceFileName, linuxPath, devDirs, secondVersion, args, firstVersion )
 
     if secondFileName == '':
         return
@@ -459,7 +460,7 @@ rickDiff does leave files in the %TEMP directory when it is done.
     # parse the third version argument and build the shell command (if we need one)
     if thirdVersion != '' or args.three_way:
         thirdVersion, thirdFileName = \
-                handleArgument( 'third', sourceFileName, linuxPath, devDirs, thirdVersion, args, firstVersion )
+                handleArgument( devRoot, 'third', sourceFileName, linuxPath, devDirs, thirdVersion, args, firstVersion )
     else:
         thirdFileName = ''
 
