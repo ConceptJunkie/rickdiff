@@ -8,6 +8,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 
 
 #//************************************************************************************************
@@ -17,7 +18,7 @@ import tempfile
 #//************************************************************************************************
 
 PROGRAM_NAME = 'rickDiff'
-VERSION = '0.10.2'
+VERSION = '0.11.0'
 DESCRIPTION = 'compares CVS versions using meld'
 
 STD_DEV_NULL = ' > NUL'
@@ -26,6 +27,8 @@ ERR_DEV_NULL = ' 2> NUL'
 TO_DEV_NULL = STD_DEV_NULL + ERR_DEV_NULL
 
 CLEAR_LINE = '\r                             \r'
+
+DEFAULT_DEV_ROOT = 'd:\\dev'
 
 
 #//******************************************************************************
@@ -159,6 +162,8 @@ def parseVersionFromEntries( targetFile ):
 
     entriesFileName = os.sep.join( pathList )
 
+    print( targetFile, entriesFileName )
+
     for line in codecs.open( entriesFileName, 'rU', 'ascii', 'replace' ):
         fields = line[ : -1 ].split( '/' )
 
@@ -282,7 +287,6 @@ def createFileCommand( devRoot, sourceFileName, versionArg, linuxPath, devDirs, 
     return command, fileName, version
 
 
-
 #//******************************************************************************
 #//
 #//  retrieveFile
@@ -384,14 +388,13 @@ Any other name is passed on to CVS, so branch names and tag names can be used.\n
 rickDiff does leave files in the %TEMP directory when it is done.
 ''' )
 
-    parser.add_argument( '-3', '--three_way', action='store_true', help='three-way comparison' )
     parser.add_argument( '-d', '--skip_dos2unix', action='store_true',
                          help='skips dos2unix-unix2dos step, which is intended to fix line endings' )
     parser.add_argument( '-l', '--local', action='store_true', help='use the local file, don\'t check out from the HEAD' )
+    parser.add_argument( '-o', '--root', action='store', default=DEFAULT_DEV_ROOT, help='development tree root directory' )
     parser.add_argument( '-t', '--test', action='store_true', help='print commands, don\'t execute them' )
 
     group = parser.add_mutually_exclusive_group( )
-
     group.add_argument( '-r', '--reverse', action='store_true', help='load the files into Meld in reverse order' )
     group.add_argument( '-x1', '--exchange12', action='store_true', help='exchange files 1 and 2 when loading Meld' )
     group.add_argument( '-x2', '--exchange23', action='store_true', help='exchange files 2 and 3 when loading Meld' )
@@ -403,6 +406,10 @@ rickDiff does leave files in the %TEMP directory when it is done.
     group.add_argument( '-a', '--astyle', action='store_true', help='run astyle on non-local files before comparison' )
     group.add_argument( '-u', '--uncrustify', action='store_true', help='run uncrustify on non-local files before comparison' )
 
+    group = parser.add_mutually_exclusive_group( )
+    parser.add_argument( '-3', '--three_way', action='store_true', help='three-way comparison' )
+    parser.add_argument( '-b', '--batch_compare', action='store_true', help='batch compare (launch multiple instances of Meld)' )
+
     # let's do a little preprocessing of the argument list because argparse is missing a few pieces of functionality
     new_argv = list( )
 
@@ -413,8 +420,12 @@ rickDiff does leave files in the %TEMP directory when it is done.
     secondVersion = ''
     thirdVersion = ''
 
+    fileList = [ ]
+
     for arg in sys.argv[ 1: ]:
         if arg[ 0 ] not in prefixList:
+            fileList.append( arg )  # used for -b
+
             if fileName == '':
                 fileName = arg
             elif firstVersion == '':
@@ -423,8 +434,6 @@ rickDiff does leave files in the %TEMP directory when it is done.
                 secondVersion = arg
             elif thirdVersion == '':
                 thirdVersion = arg
-            else:
-                print( 'ignoring extra arg: ' + arg )
         else:
             new_argv.append( arg )
 
@@ -438,17 +447,17 @@ rickDiff does leave files in the %TEMP directory when it is done.
     # determine the CVS information
     try:
         with open( 'CVS/Repository' ) as inputFile:
-            linuxPath = inputFile.read( )[ : -1 ]
+            linuxRoot = inputFile.read( )[ : -1 ]
     except:
         print( PROGRAM_NAME + ':  cannot find CVS/Repository (not in the sandbox?)' )
         return
 
     # parse the arguments
-    linuxPath += '/' + fileName.replace( '\\', '/' )
+    linuxPath = linuxRoot + '/' + fileName.replace( '\\', '/' )
 
     sourceFileName = fileName.replace( '/', '\\' )
 
-    devRoot = 'd:\\dev'
+    devRoot = args.root
 
     devDirs = [ name for name in os.listdir( devRoot ) if os.path.isdir( os.path.join( devRoot, name ) ) ]
 
@@ -457,6 +466,34 @@ rickDiff does leave files in the %TEMP directory when it is done.
         return
 
     base, ext = os.path.splitext( os.path.basename( sourceFileName ) )
+
+    # batch comparison is a whole different thing (and much simpler)
+    if args.batch_compare:
+        for fileName in fileList:
+            # parse the arguments
+            linuxPath = linuxRoot + '/' + fileName
+            linuxPath.replace( '\\', '/' )
+
+            sourceFileName = fileName.replace( '/', '\\' )
+
+            firstVersion, firstFileName = \
+                handleArgument( devRoot, 'first', sourceFileName, linuxPath, [ ], 'CURRENT', args )
+
+            secondVersion, secondFileName = \
+                handleArgument( devRoot, 'second', sourceFileName, linuxPath, [ ], '', args )
+
+            command = 'meld ' + firstFileName + ' ' + secondFileName
+
+            if args.test:
+                print( command )
+            else:
+                print( CLEAR_LINE, end='' )
+                print( 'Launching Meld...\r', end='' )
+                os.system( command )
+                print( CLEAR_LINE )
+                time.sleep( 1 )
+
+        return
 
     # parse the first version argument and build the shell command
     if firstVersion == '':
