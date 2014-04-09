@@ -162,8 +162,6 @@ def parseVersionFromEntries( targetFile ):
 
     entriesFileName = os.sep.join( pathList )
 
-    print( targetFile, entriesFileName )
-
     for line in codecs.open( entriesFileName, 'rU', 'ascii', 'replace' ):
         fields = line[ : -1 ].split( '/' )
 
