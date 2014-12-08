@@ -18,7 +18,7 @@ import time
 #//************************************************************************************************
 
 PROGRAM_NAME = 'rickDiff'
-VERSION = '0.11.0'
+VERSION = '0.11.1'
 DESCRIPTION = 'compares CVS versions using meld'
 
 STD_DEV_NULL = ' > NUL'
@@ -265,7 +265,7 @@ def createFileCommand( devRoot, sourceFileName, versionArg, linuxPath, devDirs, 
         source = buildDevFileName( devRoot, sourceFileName, versionArg )
 
         if not os.path.isfile( source ):
-            raise Exception( "File '" + source + "' does not appear to exist." )
+            raise Exception( "File '" + source + "' does not appear to exist.\nAborting..." )
 
         version = versionArg
 
@@ -297,7 +297,7 @@ def retrieveFile( command, ordinal, version, fileName, sourceFileName, astyle, u
     os.system( command )
 
     if os.stat( fileName ).st_size == 0:
-        raise Exception( "Version '" + version + "' not found for file '" + sourceFileName + "'" )
+        raise Exception( "Version '" + version + "' not found for file '" + sourceFileName + "'\nAborting..." )
 
     print( '\rFormatting ' + ordinal + ' file...\r', end='' )
 
@@ -543,7 +543,8 @@ rickDiff does leave files in the %TEMP directory when it is done.
     else:
         print( CLEAR_LINE, end='' )
         print( 'Launching Meld...\r', end='' )
-        os.system( command )
+        subprocess.Popen( command, shell=True )
+
         print( CLEAR_LINE, end='' )
 
 
