@@ -18,7 +18,7 @@ import time
 #//************************************************************************************************
 
 PROGRAM_NAME = 'rickDiff'
-VERSION = '0.11.1'
+VERSION = '0.11.2'
 DESCRIPTION = 'compares CVS versions using meld'
 
 STD_DEV_NULL = ' > NUL'
@@ -85,7 +85,7 @@ def incrementVersionSimple( version, increment ):
 #//              (positive or negative)
 #//
 #//  If the increment goes higher then the current version, then it will call
-#//  incrementVersionSimple.  This may or may be a valid version number.
+#//  incrementVersionSimple.  This may or may not be a valid version number.
 #//
 #//  If the increment goes lower than 1.1, then it will return '1.1'
 #//
@@ -254,7 +254,6 @@ def createFileCommand( devRoot, sourceFileName, versionArg, linuxPath, devDirs, 
             version = incrementVersion( sourceFileName, version, increment )
 
         fileName = os.path.join( tempDir, base + '.' + version + ext )
-
         command = 'cvs co -p -r ' + version + ' ' + linuxPath + ' > ' + fileName + ERR_DEV_NULL
     elif versionArg[ 0 ] == '+':
         version = incrementVersion( sourceFileName, oldVersion, int( versionArg[ 1: ] ) )
@@ -304,7 +303,7 @@ def retrieveFile( command, ordinal, version, fileName, sourceFileName, astyle, u
     if astyle:
         os.system( 'astyle ' + fileName + TO_DEV_NULL )
     elif uncrustify:
-        os.system( 'astyle ' + fileName + TO_DEV_NULL )
+        os.system( 'uncrustify ' + fileName + TO_DEV_NULL )
         os.system( 'move /y ' + fileName + '.uncrustify ' + fileName + TO_DEV_NULL )
     elif not skip_dos2unix:
         os.system( 'dos2unix ' + fileName + TO_DEV_NULL )
@@ -367,10 +366,11 @@ def main( ):
 '''
 rickDiff relies on the existence of the file 'CVS/Repository' to figure out
 where 'fileName' is, uses the environment variable 'TEMP', and expects 'cvs'
-'meld', and 'astyle' to launch those respective programs from the command line.\n
+'meld', and 'astyle' and 'uncrustify' to launch those respective programs from
+the command line.
 
 It also assumes that a version string that is the name of a directory under
-devRoot means that it should compare the appropriate file under that directory.\n
+devRoot means that it should compare the appropriate file under that directory.
 
 rickDiff recognizes some special version names:  'HEAD' for the CVS trunk
 version; 'CURRENT' for the currently checked out version (according to
@@ -379,9 +379,9 @@ rickDiff will retrieve n versions back, according to 'cvs log'.  This may be
 somewhat unpredictable when branches are involved.
 
 In addition, a version name after the first of the form '+n' will be translated
-into the previously specified version incremented by n versions.\n
+into the previously specified version incremented by n versions.
 
-Any other name is passed on to CVS, so branch names and tag names can be used.\n
+Any other name is passed on to CVS, so branch names and tag names can be used.
 
 rickDiff does leave files in the %TEMP directory when it is done.
 ''' )
@@ -503,6 +503,7 @@ rickDiff does leave files in the %TEMP directory when it is done.
     if firstFileName == '':
         return
 
+    # parse the second version argument and build the shell command
     secondVersion, secondFileName = \
             handleArgument( devRoot, 'second', sourceFileName, linuxPath, devDirs, secondVersion, args, firstVersion )
 
@@ -543,7 +544,7 @@ rickDiff does leave files in the %TEMP directory when it is done.
     else:
         print( CLEAR_LINE, end='' )
         print( 'Launching Meld...\r', end='' )
-        subprocess.Popen( command, shell=True )
+        subprocess.Popen( command + ">& NUL", shell=True )
 
         print( CLEAR_LINE, end='' )
 
