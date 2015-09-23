@@ -18,7 +18,7 @@ import time
 #//************************************************************************************************
 
 PROGRAM_NAME = 'rickDiff'
-VERSION = '0.11.2'
+VERSION = '0.11.3'
 DESCRIPTION = 'compares CVS versions using meld'
 
 STD_DEV_NULL = ' > NUL'
@@ -330,7 +330,7 @@ def retrieveFile( command, ordinal, version, fileName, sourceFileName, astyle, u
 def handleArgument( devRoot, ordinal, sourceFileName, linuxPath, devDirs, versionArg, args, oldVersion='' ):
     try:
         command, fileName, version = \
-               createFileCommand( devRoot, sourceFileName, versionArg, linuxPath, devDirs, args.local, oldVersion )
+               createFileCommand( devRoot, sourceFileName, versionArg, linuxPath, devDirs, not args.non_local, oldVersion )
     except Exception as error:
         print( PROGRAM_NAME + ": {0}".format( error ) )
         return '', ''
@@ -388,7 +388,11 @@ rickDiff does leave files in the %TEMP directory when it is done.
 
     parser.add_argument( '-d', '--skip_dos2unix', action='store_true',
                          help='skips dos2unix-unix2dos step, which is intended to fix line endings' )
-    parser.add_argument( '-l', '--local', action='store_true', help='use the local file, don\'t check out from the HEAD' )
+
+    group = parser.add_mutually_exclusive_group( )
+    parser.add_argument( '-n', '--non_local', action='store_true', help='don't use the local file, copy to the temp directory' )
+    parser.add_argument( '-l', '--local', action='store_true', help='use the local file, don\'t copy to the temp directory (default)' )
+
     parser.add_argument( '-o', '--root', action='store', default=DEFAULT_DEV_ROOT, help='development tree root directory' )
     parser.add_argument( '-t', '--test', action='store_true', help='print commands, don\'t execute them' )
 
