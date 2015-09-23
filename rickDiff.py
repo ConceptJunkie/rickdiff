@@ -241,7 +241,7 @@ def createFileCommand( devRoot, sourceFileName, versionArg, linuxPath, devDirs, 
         else:
             command = 'copy ' + sourceFileName + ' ' + tempDir + TO_DEV_NULL
             fileName = os.path.join( tempDir, base + ext )
-    elif versionArg == 'HEAD':
+    elif versionArg == 'HEAD' or 'TRUNK':
         version = getHeadVersion( sourceFileName )
         fileName = os.path.join( tempDir, base + '.' + version + ext )
         command = 'cvs co -p -r ' + version + ' ' + linuxPath + ' > ' + fileName + ERR_DEV_NULL
@@ -372,8 +372,8 @@ the command line.
 It also assumes that a version string that is the name of a directory under
 devRoot means that it should compare the appropriate file under that directory.
 
-rickDiff recognizes some special version names:  'HEAD' for the CVS trunk
-version; 'CURRENT' for the currently checked out version (according to
+rickDiff recognizes some special version names:  'HEAD' and 'TRUNK' for the CVS
+trunk version; 'CURRENT' for the currently checked out version (according to
 'CVS/Entries'.  'CURRENT' can be followed by '-n' where n is a number, and
 rickDiff will retrieve n versions back, according to 'cvs log'.  This may be
 somewhat unpredictable when branches are involved.
@@ -389,12 +389,12 @@ rickDiff does leave files in the %TEMP directory when it is done.
     parser.add_argument( '-d', '--skip_dos2unix', action='store_true',
                          help='skips dos2unix-unix2dos step, which is intended to fix line endings' )
 
+    parser.add_argument( '-o', '--root', action='store', default=DEFAULT_DEV_ROOT, help='development tree root directory' )
+    parser.add_argument( '-t', '--test', action='store_true', help='print commands, don\'t execute them' )
+
     group = parser.add_mutually_exclusive_group( )
     parser.add_argument( '-n', '--non_local', action='store_true', help='don't use the local file, copy to the temp directory' )
     parser.add_argument( '-l', '--local', action='store_true', help='use the local file, don\'t copy to the temp directory (default)' )
-
-    parser.add_argument( '-o', '--root', action='store', default=DEFAULT_DEV_ROOT, help='development tree root directory' )
-    parser.add_argument( '-t', '--test', action='store_true', help='print commands, don\'t execute them' )
 
     group = parser.add_mutually_exclusive_group( )
     group.add_argument( '-r', '--reverse', action='store_true', help='load the files into Meld in reverse order' )
