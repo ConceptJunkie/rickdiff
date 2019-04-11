@@ -28,7 +28,7 @@ TO_DEV_NULL = STD_DEV_NULL + ERR_DEV_NULL
 
 CLEAR_LINE = '\r                             \r'
 
-DEFAULT_DEV_ROOT = 'd:\\dev'
+DEFAULT_DEV_ROOT = 'c:\\dev'
 
 
 #//******************************************************************************
@@ -335,7 +335,7 @@ def handleArgument( devRoot, ordinal, sourceFileName, linuxPath, devDirs, versio
         print( PROGRAM_NAME + ": {0}".format( error ) )
         return '', ''
 
-    # execute the command for the third file (if we need to)
+    # execute the command (if we need to)
     if command != '':
         if args.test:
             print( command )
